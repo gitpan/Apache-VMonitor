@@ -1,6 +1,6 @@
 package Apache::VMonitor;
 
-$Apache::VMonitor::VERSION = '0.7';
+$Apache::VMonitor::VERSION = '0.8';
 
 use strict;
 
@@ -321,7 +321,7 @@ sub print_top{
                  vsize      => $vsize,
                  rss        => $rss,
                  client     => $process->client,
-                 request    => $process->request,
+                 request    => Apache::Util::escape_html($process->request),
                 };
         }
     } # end of for (my $i=0...
@@ -724,7 +724,8 @@ sub print_single{
       printf "$title_format %s\n",
         "Client IP or DNS",$process->client;
       printf "$title_format %s\n",
-        "Request (first 64 chars)",$process->request;
+        "Request (first 64 chars)",
+            Apache::Util::escape_html($process->request);
 
     } # end of unless ($i == -1)
 
@@ -1528,6 +1529,10 @@ also have to enable the extended status for mod_status, for this
 module to work properly. In I<httpd.conf> add:
 
   ExtendedStatus On
+
+Notice that turning the C<ExtendedStatus> mode I<On> is not
+recommended for high-performance production sites, as it adds an
+overhead to the request response times.
 
 You also need B<Time::HiRes> and B<GTop> to be installed.
 

@@ -295,6 +295,10 @@ PREREQUISITES
 
       ExtendedStatus On
 
+    Notice that turning the "ExtendedStatus" mode *On* is not recommended
+    for high-performance production sites, as it adds an overhead to the
+    request response times.
+
     You also need Time::HiRes and GTop to be installed.
 
     And of course you need a running mod_perl enabled apache server.
@@ -308,8 +312,7 @@ TODO
     me know. Thanks!
 
 SEE ALSO
-    the Apache manpage, the mod_perl manpage, the Apache::Scoreboard
-    manpage, the GTop manpage
+    Apache, mod_perl, Apache::Scoreboard, GTop
 
 AUTHORS
     Stas Bekman <stas@stason.org>
