@@ -1,422 +1,198 @@
-.rn '' }`
-''' $RCSfile$$Revision$$Date$
-'''
-''' $Log$
-'''
-.de Sh
-.br
-.if t .Sp
-.ne 5
-.PP
-\fB\\$1\fR
-.PP
-..
-.de Sp
-.if t .sp .5v
-.if n .sp
-..
-.de Ip
-.br
-.ie \\n(.$>=3 .ne \\$3
-.el .ne 3
-.IP "\\$1" \\$2
-..
-.de Vb
-.ft CW
-.nf
-.ne \\$1
-..
-.de Ve
-.ft R
+NAME
+    Apache::VMonitor - Visual System and Server Processes Monitor
 
-.fi
-..
-'''
-'''
-'''     Set up \*(-- to give an unbreakable dash;
-'''     string Tr holds user defined translation string.
-'''     Bell System Logo is used as a dummy character.
-'''
-.tr \(*W-|\(bv\*(Tr
-.ie n \{\
-.ds -- \(*W-
-.ds PI pi
-.if (\n(.H=4u)&(1m=24u) .ds -- \(*W\h'-12u'\(*W\h'-12u'-\" diablo 10 pitch
-.if (\n(.H=4u)&(1m=20u) .ds -- \(*W\h'-12u'\(*W\h'-8u'-\" diablo 12 pitch
-.ds L" ""
-.ds R" ""
-'''   \*(M", \*(S", \*(N" and \*(T" are the equivalent of
-'''   \*(L" and \*(R", except that they are used on ".xx" lines,
-'''   such as .IP and .SH, which do another additional levels of
-'''   double-quote interpretation
-.ds M" """
-.ds S" """
-.ds N" """""
-.ds T" """""
-.ds L' '
-.ds R' '
-.ds M' '
-.ds S' '
-.ds N' '
-.ds T' '
-'br\}
-.el\{\
-.ds -- \(em\|
-.tr \*(Tr
-.ds L" ``
-.ds R" ''
-.ds M" ``
-.ds S" ''
-.ds N" ``
-.ds T" ''
-.ds L' `
-.ds R' '
-.ds M' `
-.ds S' '
-.ds N' `
-.ds T' '
-.ds PI \(*p
-'br\}
-.\"	If the F register is turned on, we'll generate
-.\"	index entries out stderr for the following things:
-.\"		TH	Title 
-.\"		SH	Header
-.\"		Sh	Subsection 
-.\"		Ip	Item
-.\"		X<>	Xref  (embedded
-.\"	Of course, you have to process the output yourself
-.\"	in some meaninful fashion.
-.if \nF \{
-.de IX
-.tm Index:\\$1\t\\n%\t"\\$2"
-..
-.nr % 0
-.rr F
-.\}
-.TH VMonitor 3 "perl 5.005, patch 03" "5/Oct/1999" "User Contributed Perl Documentation"
-.UC
-.if n .hy 0
-.if n .na
-.ds C+ C\v'-.1v'\h'-1p'\s-2+\h'-1p'+\s0\v'.1v'\h'-1p'
-.de CQ          \" put $1 in typewriter font
-.ft CW
-'if n "\c
-'if t \\&\\$1\c
-'if n \\&\\$1\c
-'if n \&"
-\\&\\$2 \\$3 \\$4 \\$5 \\$6 \\$7
-'.ft R
-..
-.\" @(#)ms.acc 1.5 88/02/08 SMI; from UCB 4.2
-.	\" AM - accent mark definitions
-.bd B 3
-.	\" fudge factors for nroff and troff
-.if n \{\
-.	ds #H 0
-.	ds #V .8m
-.	ds #F .3m
-.	ds #[ \f1
-.	ds #] \fP
-.\}
-.if t \{\
-.	ds #H ((1u-(\\\\n(.fu%2u))*.13m)
-.	ds #V .6m
-.	ds #F 0
-.	ds #[ \&
-.	ds #] \&
-.\}
-.	\" simple accents for nroff and troff
-.if n \{\
-.	ds ' \&
-.	ds ` \&
-.	ds ^ \&
-.	ds , \&
-.	ds ~ ~
-.	ds ? ?
-.	ds ! !
-.	ds /
-.	ds q
-.\}
-.if t \{\
-.	ds ' \\k:\h'-(\\n(.wu*8/10-\*(#H)'\'\h"|\\n:u"
-.	ds ` \\k:\h'-(\\n(.wu*8/10-\*(#H)'\`\h'|\\n:u'
-.	ds ^ \\k:\h'-(\\n(.wu*10/11-\*(#H)'^\h'|\\n:u'
-.	ds , \\k:\h'-(\\n(.wu*8/10)',\h'|\\n:u'
-.	ds ~ \\k:\h'-(\\n(.wu-\*(#H-.1m)'~\h'|\\n:u'
-.	ds ? \s-2c\h'-\w'c'u*7/10'\u\h'\*(#H'\zi\d\s+2\h'\w'c'u*8/10'
-.	ds ! \s-2\(or\s+2\h'-\w'\(or'u'\v'-.8m'.\v'.8m'
-.	ds / \\k:\h'-(\\n(.wu*8/10-\*(#H)'\z\(sl\h'|\\n:u'
-.	ds q o\h'-\w'o'u*8/10'\s-4\v'.4m'\z\(*i\v'-.4m'\s+4\h'\w'o'u*8/10'
-.\}
-.	\" troff and (daisy-wheel) nroff accents
-.ds : \\k:\h'-(\\n(.wu*8/10-\*(#H+.1m+\*(#F)'\v'-\*(#V'\z.\h'.2m+\*(#F'.\h'|\\n:u'\v'\*(#V'
-.ds 8 \h'\*(#H'\(*b\h'-\*(#H'
-.ds v \\k:\h'-(\\n(.wu*9/10-\*(#H)'\v'-\*(#V'\*(#[\s-4v\s0\v'\*(#V'\h'|\\n:u'\*(#]
-.ds _ \\k:\h'-(\\n(.wu*9/10-\*(#H+(\*(#F*2/3))'\v'-.4m'\z\(hy\v'.4m'\h'|\\n:u'
-.ds . \\k:\h'-(\\n(.wu*8/10)'\v'\*(#V*4/10'\z.\v'-\*(#V*4/10'\h'|\\n:u'
-.ds 3 \*(#[\v'.2m'\s-2\&3\s0\v'-.2m'\*(#]
-.ds o \\k:\h'-(\\n(.wu+\w'\(de'u-\*(#H)/2u'\v'-.3n'\*(#[\z\(de\v'.3n'\h'|\\n:u'\*(#]
-.ds d- \h'\*(#H'\(pd\h'-\w'~'u'\v'-.25m'\f2\(hy\fP\v'.25m'\h'-\*(#H'
-.ds D- D\\k:\h'-\w'D'u'\v'-.11m'\z\(hy\v'.11m'\h'|\\n:u'
-.ds th \*(#[\v'.3m'\s+1I\s-1\v'-.3m'\h'-(\w'I'u*2/3)'\s-1o\s+1\*(#]
-.ds Th \*(#[\s+2I\s-2\h'-\w'I'u*3/5'\v'-.3m'o\v'.3m'\*(#]
-.ds ae a\h'-(\w'a'u*4/10)'e
-.ds Ae A\h'-(\w'A'u*4/10)'E
-.ds oe o\h'-(\w'o'u*4/10)'e
-.ds Oe O\h'-(\w'O'u*4/10)'E
-.	\" corrections for vroff
-.if v .ds ~ \\k:\h'-(\\n(.wu*9/10-\*(#H)'\s-2\u~\d\s+2\h'|\\n:u'
-.if v .ds ^ \\k:\h'-(\\n(.wu*10/11-\*(#H)'\v'-.4m'^\v'.4m'\h'|\\n:u'
-.	\" for low resolution devices (crt and lpr)
-.if \n(.H>23 .if \n(.V>19 \
-\{\
-.	ds : e
-.	ds 8 ss
-.	ds v \h'-1'\o'\(aa\(ga'
-.	ds _ \h'-1'^
-.	ds . \h'-1'.
-.	ds 3 3
-.	ds o a
-.	ds d- d\h'-1'\(ga
-.	ds D- D\h'-1'\(hy
-.	ds th \o'bp'
-.	ds Th \o'LP'
-.	ds ae ae
-.	ds Ae AE
-.	ds oe oe
-.	ds Oe OE
-.\}
-.rm #[ #] #H #V #F C
-.SH "NAME"
-Apache::VMonitor \- Visual System and Server Processes Monitor
-.SH "SYNOPSIS"
-.PP
-.Vb 5
-\&  # Configuration in httpd.conf
-\&  <Location /sys-monitor>
-\&    SetHandler perl-script
-\&    PerlHandler Apache::VMonitor
-\&  </Location>
-.Ve
-.Vb 10
-\&  # startup file or <Perl> section:
-\&  use Apache::VMonitor();
-\&  $Apache::VMonitor::BLINKING = 1;
-\&  $Apache::VMonitor::REFRESH  = 0;
-\&  $Apache::VMonitor::VERBOSE  = 0;
-\&  $Apache::VMonitor::TOP      = 1;
-\&  $Apache::VMonitor::MOUNT    = 1;
-\&  $Apache::VMonitor::FS_USAGE = 1;
-\&  $Apache::VMonitor::NETLOAD  = 1;
-\&  @Apache::VMonitor::NETDEVS  = qw(lo eth0);
-.Ve
-.SH "DESCRIPTION"
-This module emulates the reporting functionalities of \fItop()\fR, \fImount()\fR,
-\fIdf()\fR and \fIifconfig()\fR utilities. It has a visual alert capabilities and
-configurable automatic refresh mode.
-.Ip "refresh mode" 5
-From within a displayed monitor (by clicking on a desired refresh
-value) or by setting of \fB$Apache::VMonitor::\s-1REFRESH\s0\fR to a number of
-seconds between refreshes you can control the refresh rate. e.g:
-.Sp
-.Vb 1
-\&  $Apache::VMonitor::REFRESH = 60;
-.Ve
-will cause the report to be refreshed every single minute.
-.Sp
-Note that 0 (zero) turns refreshing off.
-.Ip "top() emulation" 5
-Just like \fItop()\fR it shows all the system \s-1CPU\s0 and
-memory usage: \s-1CPU\s0 Load, Mem and Swap usage.
-.Sp
-The \fItop()\fR section includes a swap space usage visual alert
-capability. The color of the swap report will be changed:
-.Sp
-.Vb 3
-\&   1) 5Mb < swap < 10 MB             color: light red
-\&   2) 20% < swap (swapping is bad!)  color: red
-\&   3) 70% < swap (swap almost used!) color: red + blinking
-.Ve
-Note that you can turn off blinking with:
-.Sp
-.Vb 1
-\&  $Apache::VMonitor::BLINKING = 0;
-.Ve
-The module doesn't alert when swap is being used just a little (<5Mb),
-since it happens most of the time, even when there is plenty of free
-\s-1RAM\s0.
-.Sp
-Then just like in real \fItop()\fR there is a report of the processes, but
-it shows all the relevant information about httpd processes only! The
-report includes process\*(R' id, size, shared, virtual and resident size,
-and a report about the used segments: text, shared lib, date and stack.
-.Sp
-At the end there is a calculation of the total memory being used by
-all httpd processes as reported by kernel, plus a result of an attempt
-to approximately calculate the real memory usage when sharing is in
-place. How do I calculate this:
-.Sp
-1. For each process sum up the difference between shared and system
-memory.
-.Sp
-2. Now if we add the share size of the process with maximum
-shared memory, we will get all the memory that actually is being
-used by all httpd processes but the parent process.
-.Sp
-Please note that this might be incorrect for your system, so you use
-this number on your own risk. I have verified this number, by writing
-it down and then killing all the servers. The system memory went down
-by approximately this number. Again, use this number wisely!
-.Sp
-If you don't want the \fItop()\fR section to be displayed set:
-.Sp
-.Vb 1
-\&  $Apache::VMonitor::TOP = 0;
-.Ve
-The default is to display this section.
-.Ip "mount() emulation" 5
-This section reports about mounted filesystems, the same way as if you
-have called \fImount()\fR with no parameters.
-.Sp
-If you want the \fImount()\fR section to be displayed set:
-.Sp
-.Vb 1
-\&  $Apache::VMonitor::MOUNT = 1;
-.Ve
-The default is \s-1NOT\s0 to display this section.
-.Ip "df() emulation " 5
-This section completely reproduces the \fIdf()\fR utility. For each mounted
-filesystem it reports the number of total and available blocks (for
-both superuser and user), and usage in percents.
-.Sp
-In addition it reports about available and used filenodes in numbers
-and percents.
-.Sp
-This section has a capability of visual alert which is being triggered
-when either some filesystem becomes more than 90% full or there are
-less 10% of free filenodes left. When that happens the filesystem
-related line will go bold and red and a mounting point will blink if
-the blinking is turned on. You can the blinking off with:
-.Sp
-.Vb 1
-\&  $Apache::VMonitor::BLINKING = 0;
-.Ve
-If you don't want the \fIdf()\fR section to be displayed set:
-.Sp
-.Vb 1
-\&  $Apache::VMonitor::FS_USAGE = 0;
-.Ve
-The default is to display this section.
-.Ip "ifconfig() emulation " 5
-This section emulates the reporting capabilities of the \fIifconfig()\fR
-utility. It reports how many packets and bytes were received and
-transmitted, their total, counts of errors and collisions, mtu
-size. in order to display this section you need to set two variables:
-.Sp
-.Vb 1
-\&  $Apache::VMonitor::NETLOAD = 1;
-.Ve
-and to set a list of net devices to report for, like:
-.Sp
-.Vb 1
-\&  @Apache::VMonitor::NETDEVS  = qw(lo eth0);
-.Ve
-The default is \s-1NOT\s0 to display this section.
-.Ip "abbreviations and hints" 5
-The monitor uses many abbreviations, which might be knew for you. If
-you enable the \s-1VERBOSE\s0 mode with:
-.Sp
-.Vb 1
-\&  $Apache::VMonitor::VERBOSE = 1;
-.Ve
-this section will reveal all the full names of the abbreviations at
-the bottom of the report.
-.Sp
-The default is \s-1NOT\s0 to display this section.
-.SH "CONFIGURATION"
-To enable this module you should modify a configuration in
-\fBhttpd.conf\fR, if you add the following configuration:
-.PP
-.Vb 4
-\&  <Location /sys-monitor>
-\&    SetHandler perl-script
-\&    PerlHandler Apache::VMonitor
-\&  </Location>
-.Ve
-The monitor will be displayed when you request
-http://localhost/sys-monitor or alike.
-.PP
-You can control the behavior of this module by configuring the
-following variables in the startup file or inside the \fB<Perl\fR>
-section.
-.PP
-Module loading:
-.PP
-.Vb 1
-\&  use Apache::VMonitor();
-.Ve
-Monitor reporting behavior:
-.PP
-.Vb 3
-\&  $Apache::VMonitor::BLINKING = 1;
-\&  $Apache::VMonitor::REFRESH  = 0;
-\&  $Apache::VMonitor::VERBOSE  = 0;
-.Ve
-Control over what sections to display:
-.PP
-.Vb 4
-\&  $Apache::VMonitor::TOP      = 1;
-\&  $Apache::VMonitor::MOUNT    = 1;
-\&  $Apache::VMonitor::FS_USAGE = 1;
-\&  $Apache::VMonitor::NETLOAD  = 1;
-.Ve
-What net devices to display if \fB$Apache::VMonitor::NETLOAD\fR is ON:
-.PP
-.Vb 1
-\&  @Apache::VMonitor::NETDEVS  = qw(lo);
-.Ve
-Read the DESCRIPTION section for a complete
-explanation of each of these variables.
-.SH "PREREQUISITES"
-You need to have \fBApache::Scoreboard\fR and \fBGTop\fR installed. And of
-course a running mod_perl enabled apache server.
-.SH "SEE ALSO"
-the \fIApache\fR manpage, the \fImod_perl\fR manpage, the \fIApache::Scoreboard\fR manpage, the \fIGTop\fR manpage
-.SH "AUTHORS"
-Stas Bekman <sbekman@iname.com>
-.SH "COPYRIGHT"
-The Apache::VMonitor module is free software; you can redistribute it
-and/or modify it under the same terms as Perl itself.
+SYNOPSIS
+      # Configuration in httpd.conf
+      <Location /sys-monitor>
+        SetHandler perl-script
+        PerlHandler Apache::VMonitor
+      </Location>
 
-.rn }` ''
-.IX Title "VMonitor 3"
-.IX Name "Apache::VMonitor - Visual System and Server Processes Monitor"
+      # startup file or <Perl> section:
+      use Apache::VMonitor();
+      $Apache::VMonitor::BLINKING = 1;
+      $Apache::VMonitor::REFRESH  = 0;
+      $Apache::VMonitor::VERBOSE  = 0;
+      $Apache::VMonitor::TOP      = 1;
+      $Apache::VMonitor::MOUNT    = 1;
+      $Apache::VMonitor::FS_USAGE = 1;
+      $Apache::VMonitor::NETLOAD  = 1;
+      @Apache::VMonitor::NETDEVS  = qw(lo eth0);
 
-.IX Header "NAME"
+DESCRIPTION
+    This module emulates the reporting functionalities of top(), mount(),
+    df() and ifconfig() utilities. It has a visual alert capabilities and
+    configurable automatic refresh mode.
 
-.IX Header "SYNOPSIS"
+    refresh mode
+        From within a displayed monitor (by clicking on a desired refresh
+        value) or by setting of $Apache::VMonitor::REFRESH to a number of
+        seconds between refreshes you can control the refresh rate. e.g:
 
-.IX Header "DESCRIPTION"
+          $Apache::VMonitor::REFRESH = 60;
 
-.IX Item "refresh mode"
+        will cause the report to be refreshed every single minute.
 
-.IX Item "top() emulation"
+        Note that 0 (zero) turns refreshing off.
 
-.IX Item "mount() emulation"
+    top() emulation
+        Just like top() it shows all the system CPU and memory usage: CPU
+        Load, Mem and Swap usage.
 
-.IX Item "df() emulation "
+        The top() section includes a swap space usage visual alert
+        capability. The color of the swap report will be changed:
 
-.IX Item "ifconfig() emulation "
+           1) 5Mb < swap < 10 MB             color: light red
+           2) 20% < swap (swapping is bad!)  color: red
+           3) 70% < swap (swap almost used!) color: red + blinking
 
-.IX Item "abbreviations and hints"
+        Note that you can turn off blinking with:
 
-.IX Header "CONFIGURATION"
+          $Apache::VMonitor::BLINKING = 0;
 
-.IX Header "PREREQUISITES"
+        The module doesn't alert when swap is being used just a little
+        (<5Mb), since it happens most of the time, even when there is plenty
+        of free RAM.
 
-.IX Header "SEE ALSO"
+        Then just like in real top() there is a report of the processes, but
+        it shows all the relevant information about httpd processes only!
+        The report includes process' id, size, shared, virtual and resident
+        size, and a report about the used segments: text, shared lib, date
+        and stack.
 
-.IX Header "AUTHORS"
+        At the end there is a calculation of the total memory being used by
+        all httpd processes as reported by kernel, plus a result of an
+        attempt to approximately calculate the real memory usage when
+        sharing is in place. How do I calculate this:
 
-.IX Header "COPYRIGHT"
+        1. For each process sum up the difference between shared and system
+        memory.
+
+        2. Now if we add the share size of the process with maximum shared
+        memory, we will get all the memory that actually is being used by
+        all httpd processes but the parent process.
+
+        Please note that this might be incorrect for your system, so you use
+        this number on your own risk. I have verified this number, by
+        writing it down and then killing all the servers. The system memory
+        went down by approximately this number. Again, use this number
+        wisely!
+
+        If you don't want the top() section to be displayed set:
+
+          $Apache::VMonitor::TOP = 0;
+
+        The default is to display this section.
+
+    mount() emulation
+        This section reports about mounted filesystems, the same way as if
+        you have called mount() with no parameters.
+
+        If you want the mount() section to be displayed set:
+
+          $Apache::VMonitor::MOUNT = 1;
+
+        The default is NOT to display this section.
+
+    df() emulation
+        This section completely reproduces the df() utility. For each
+        mounted filesystem it reports the number of total and available
+        blocks (for both superuser and user), and usage in percents.
+
+        In addition it reports about available and used filenodes in numbers
+        and percents.
+
+        This section has a capability of visual alert which is being
+        triggered when either some filesystem becomes more than 90% full or
+        there are less 10% of free filenodes left. When that happens the
+        filesystem related line will go bold and red and a mounting point
+        will blink if the blinking is turned on. You can the blinking off
+        with:
+
+          $Apache::VMonitor::BLINKING = 0;
+
+        If you don't want the df() section to be displayed set:
+
+          $Apache::VMonitor::FS_USAGE = 0;
+
+        The default is to display this section.
+
+    ifconfig() emulation
+        This section emulates the reporting capabilities of the ifconfig()
+        utility. It reports how many packets and bytes were received and
+        transmitted, their total, counts of errors and collisions, mtu size.
+        in order to display this section you need to set two variables:
+
+          $Apache::VMonitor::NETLOAD = 1;
+
+        and to set a list of net devices to report for, like:
+
+          @Apache::VMonitor::NETDEVS  = qw(lo eth0);
+
+        The default is NOT to display this section.
+
+    abbreviations and hints
+        The monitor uses many abbreviations, which might be knew for you. If
+        you enable the VERBOSE mode with:
+
+          $Apache::VMonitor::VERBOSE = 1;
+
+        this section will reveal all the full names of the abbreviations at
+        the bottom of the report.
+
+        The default is NOT to display this section.
+
+CONFIGURATION
+    To enable this module you should modify a configuration in httpd.conf,
+    if you add the following configuration:
+
+      <Location /sys-monitor>
+        SetHandler perl-script
+        PerlHandler Apache::VMonitor
+      </Location>
+
+    The monitor will be displayed when you request
+    http://localhost/sys-monitor or alike.
+
+    You can control the behavior of this module by configuring the following
+    variables in the startup file or inside the <Perl> section.
+
+    Module loading:
+
+      use Apache::VMonitor();
+
+    Monitor reporting behavior:
+
+      $Apache::VMonitor::BLINKING = 1;
+      $Apache::VMonitor::REFRESH  = 0;
+      $Apache::VMonitor::VERBOSE  = 0;
+
+    Control over what sections to display:
+
+      $Apache::VMonitor::TOP      = 1;
+      $Apache::VMonitor::MOUNT    = 1;
+      $Apache::VMonitor::FS_USAGE = 1;
+      $Apache::VMonitor::NETLOAD  = 1;
+
+    What net devices to display if $Apache::VMonitor::NETLOAD is ON:
+
+      @Apache::VMonitor::NETDEVS  = qw(lo);
+
+    Read the DESCRIPTION section for a complete explanation of each of these
+    variables.
+
+PREREQUISITES
+    You need to have Apache::Scoreboard and GTop installed. And of course a
+    running mod_perl enabled apache server.
+
+SEE ALSO
+    the Apache manpage, the mod_perl manpage, the Apache::Scoreboard
+    manpage, the GTop manpage
+
+AUTHORS
+    Stas Bekman <sbekman@iname.com>
+
+COPYRIGHT
+    The Apache::VMonitor module is free software; you can redistribute it
+    and/or modify it under the same terms as Perl itself.
 

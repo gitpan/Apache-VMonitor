@@ -11,7 +11,7 @@ my %require =
   (
    "GTop" => "0.05",
    "mod_perl" => "1.15",
-   "Apache::Scoreboard" => "0.01",
+   "Apache::Scoreboard" => "0.02",
   );
 
 #--- Installation check
@@ -51,7 +51,7 @@ WriteMakefile(
 	      NAME => __PACKAGE__,
 	      VERSION_FROM => 'VMonitor.pm',
 	      dist => {
-		       PREOP => 'pod2man VMonitor.pm > README',
+		       PREOP => 'pod2text VMonitor.pm > README',
 		       COMPRESS => 'gzip -9f',
 		       SUFFIX   => '.gz', 
 		       DIST_DEFAULT => 'all tardist',

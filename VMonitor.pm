@@ -2,7 +2,7 @@ package Apache::VMonitor;
 
 BEGIN {
   # RCS/CVS complient:  must be all one line, for MakeMaker
-  $Apache::VMonitor::VERSION = do { my @r = (q$Revision: 0.01 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r }; 
+  $Apache::VMonitor::VERSION = do { my @r = (q$Revision: 0.02 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r }; 
 }
 
 use strict;
@@ -18,11 +18,11 @@ $Apache::VMonitor::REFRESH  = 0;
 $Apache::VMonitor::VERBOSE  = 0;
 # sections to show
 $Apache::VMonitor::TOP      = 1;
-$Apache::VMonitor::MOUNT    = 1;
+$Apache::VMonitor::MOUNT    = 0;
 $Apache::VMonitor::FS_USAGE = 1;
-$Apache::VMonitor::NETLOAD  = 1;
+$Apache::VMonitor::NETLOAD  = 0;
 # devs to show if $Apache::VMonitor::NETLOAD > 0;
-@Apache::VMonitor::NETDEVS  = qw(lo);
+@Apache::VMonitor::NETDEVS  = qw();
 
 ###########
 sub handler{
