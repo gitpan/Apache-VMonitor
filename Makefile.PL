@@ -9,9 +9,9 @@ use strict;
 # prerequisites
 my %require =
   (
-   "GTop" => "0.05",
+   "GTop" => "0.06",
    "mod_perl" => "1.15",
-   "Apache::Scoreboard" => "0.02",
+   "Apache::Scoreboard" => "0.03",
   );
 
 #--- Installation check

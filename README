@@ -10,34 +10,37 @@ SYNOPSIS
 
       # startup file or <Perl> section:
       use Apache::VMonitor();
-      $Apache::VMonitor::BLINKING = 1;
-      $Apache::VMonitor::REFRESH  = 0;
-      $Apache::VMonitor::VERBOSE  = 0;
-      $Apache::VMonitor::TOP      = 1;
-      $Apache::VMonitor::MOUNT    = 1;
-      $Apache::VMonitor::FS_USAGE = 1;
-      $Apache::VMonitor::NETLOAD  = 1;
+      $Apache::VMonitor::Config{BLINKING} = 1;
+      $Apache::VMonitor::Config{REFRESH}  = 0;
+      $Apache::VMonitor::Config{VERBOSE}  = 0;
+      $Apache::VMonitor::Config{TOP}      = 1;
+      $Apache::VMonitor::Config{MOUNT}    = 1;
+      $Apache::VMonitor::Config{FS_USAGE} = 1;
+      $Apache::VMonitor::Config{NETLOAD}  = 1;
       @Apache::VMonitor::NETDEVS  = qw(lo eth0);
 
 DESCRIPTION
     This module emulates the reporting functionalities of top(), mount(),
     df() and ifconfig() utilities. It has a visual alert capabilities and
-    configurable automatic refresh mode.
+    configurable automatic refresh mode. All the sections can be
+    shown/hidden dynamically through the web interface.
 
     refresh mode
         From within a displayed monitor (by clicking on a desired refresh
-        value) or by setting of $Apache::VMonitor::REFRESH to a number of
-        seconds between refreshes you can control the refresh rate. e.g:
+        value) or by setting of $Apache::VMonitor::Config{REFRESH} to a
+        number of seconds between refreshes you can control the refresh
+        rate. e.g:
 
-          $Apache::VMonitor::REFRESH = 60;
+          $Apache::VMonitor::Config{REFRESH} = 60;
 
         will cause the report to be refreshed every single minute.
 
-        Note that 0 (zero) turns refreshing off.
+        Note that 0 (zero) turns automatic refreshing off.
 
     top() emulation
-        Just like top() it shows all the system CPU and memory usage: CPU
-        Load, Mem and Swap usage.
+        Just like top() it shows current date/time, machine uptime, average
+        load, all the system CPU and memory usage: CPU Load, Mem and Swap
+        usage.
 
         The top() section includes a swap space usage visual alert
         capability. The color of the swap report will be changed:
@@ -48,7 +51,7 @@ DESCRIPTION
 
         Note that you can turn off blinking with:
 
-          $Apache::VMonitor::BLINKING = 0;
+          $Apache::VMonitor::Config{BLINKING} = 0;
 
         The module doesn't alert when swap is being used just a little
         (<5Mb), since it happens most of the time, even when there is plenty
@@ -56,9 +59,13 @@ DESCRIPTION
 
         Then just like in real top() there is a report of the processes, but
         it shows all the relevant information about httpd processes only!
-        The report includes process' id, size, shared, virtual and resident
-        size, and a report about the used segments: text, shared lib, date
-        and stack.
+        The report includes the status of the process (starting, reading,
+        sending waiting and etc), process' id, size, shared, virtual and
+        resident size, bytes transferred by process/slot and number of
+        requests processed by process/slot and a report about the used
+        segments: text, shared lib, date and stack. It shows the last
+        client's IP and Request (only 64 chars, as this is the maximum
+        length stored by underlying Apache core library).
 
         At the end there is a calculation of the total memory being used by
         all httpd processes as reported by kernel, plus a result of an
@@ -80,7 +87,7 @@ DESCRIPTION
 
         If you don't want the top() section to be displayed set:
 
-          $Apache::VMonitor::TOP = 0;
+          $Apache::VMonitor::Config{TOP} = 0;
 
         The default is to display this section.
 
@@ -90,7 +97,7 @@ DESCRIPTION
 
         If you want the mount() section to be displayed set:
 
-          $Apache::VMonitor::MOUNT = 1;
+          $Apache::VMonitor::Config{MOUNT} = 1;
 
         The default is NOT to display this section.
 
@@ -109,11 +116,11 @@ DESCRIPTION
         will blink if the blinking is turned on. You can the blinking off
         with:
 
-          $Apache::VMonitor::BLINKING = 0;
+          $Apache::VMonitor::Config{BLINKING} = 0;
 
         If you don't want the df() section to be displayed set:
 
-          $Apache::VMonitor::FS_USAGE = 0;
+          $Apache::VMonitor::Config{FS_USAGE} = 0;
 
         The default is to display this section.
 
@@ -123,7 +130,7 @@ DESCRIPTION
         transmitted, their total, counts of errors and collisions, mtu size.
         in order to display this section you need to set two variables:
 
-          $Apache::VMonitor::NETLOAD = 1;
+          $Apache::VMonitor::Config{NETLOAD} = 1;
 
         and to set a list of net devices to report for, like:
 
@@ -135,7 +142,7 @@ DESCRIPTION
         The monitor uses many abbreviations, which might be knew for you. If
         you enable the VERBOSE mode with:
 
-          $Apache::VMonitor::VERBOSE = 1;
+          $Apache::VMonitor::Config{VERBOSE} = 1;
 
         this section will reveal all the full names of the abbreviations at
         the bottom of the report.
@@ -163,27 +170,44 @@ CONFIGURATION
 
     Monitor reporting behavior:
 
-      $Apache::VMonitor::BLINKING = 1;
-      $Apache::VMonitor::REFRESH  = 0;
-      $Apache::VMonitor::VERBOSE  = 0;
+      $Apache::VMonitor::Config{BLINKING} = 1;
+      $Apache::VMonitor::Config{REFRESH}  = 0;
+      $Apache::VMonitor::Config{VERBOSE}  = 0;
 
     Control over what sections to display:
 
-      $Apache::VMonitor::TOP      = 1;
-      $Apache::VMonitor::MOUNT    = 1;
-      $Apache::VMonitor::FS_USAGE = 1;
-      $Apache::VMonitor::NETLOAD  = 1;
+      $Apache::VMonitor::Config{TOP}      = 1;
+      $Apache::VMonitor::Config{MOUNT}    = 1;
+      $Apache::VMonitor::Config{FS_USAGE} = 1;
+      $Apache::VMonitor::Config{NETLOAD}  = 1;
 
-    What net devices to display if $Apache::VMonitor::NETLOAD is ON:
+    What net devices to display if $Apache::VMonitor::Config{NETLOAD} is ON:
 
       @Apache::VMonitor::NETDEVS  = qw(lo);
 
     Read the DESCRIPTION section for a complete explanation of each of these
     variables.
 
+DYNAMIC RECONFIGURATION
+    `Apache::VMonitor' allows you to dynamically turn on and off all the
+    sections and enter a verbose mode that explains each section and the
+    used abbreviations.
+
 PREREQUISITES
     You need to have Apache::Scoreboard and GTop installed. And of course a
     running mod_perl enabled apache server.
+
+BUGS
+    Netload section reports negative bytes transferring when the numbers are
+    very big, consider it a bug or a feature, but the problem is in the
+    underlying libgtop library or GTop module and demands investigation.
+
+TODO
+    I want to include a report about open file handlers per process to track
+    file handlers leaking. It's easy to do that by just reading them from
+    `/proc/$pid/fd' but you cannot do that unless you are root. `libgtop'
+    doesn't have this capability - if you come up with solution, please let
+    me know. Thanks!
 
 SEE ALSO
     the Apache manpage, the mod_perl manpage, the Apache::Scoreboard
