@@ -1,6 +1,6 @@
 package Apache::VMonitor;
 
-$Apache::VMonitor::VERSION = '0.5';
+$Apache::VMonitor::VERSION = '0.6';
 
 use strict;
 
@@ -153,14 +153,14 @@ sub print_top{
     my $cpu   = $gtop->cpu;
     my $total = $cpu->total;
     printf "<B>CPU:   %2.1f%% user, %2.1f%% nice, %2.1f%% sys, %2.1f%% idle</B>\n",
-        map {$cpu->$_ * 100 / $total} qw(user nice sys idle);
+        map {$cpu->$_() * 100 / $total} qw(user nice sys idle);
 
     #######################
     # total mem stats
     #######################
     my $mem = $gtop->mem;
     printf "<B>Mem:  %5s av, %5s used, %5s free, %5s shared, %5s buff</B>\n",
-        map {Apache::Util::size_string($mem->$_)} qw(total used free shared buffer);
+        map {Apache::Util::size_string($mem->$_())} qw(total used free shared buffer);
 
     #######################
     # total swap stats
