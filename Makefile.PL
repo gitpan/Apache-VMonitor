@@ -9,9 +9,10 @@ use strict;
 # prerequisites
 my %require =
   (
-   "GTop" => "0.06",
+   "GTop" => "0.09",
    "mod_perl" => "1.15",
-   "Apache::Scoreboard" => "0.03",
+   "Apache::Scoreboard" => "0.08",
+   "Time::HiRes" => "01.19",
   );
 
 #--- Installation check
@@ -54,7 +55,7 @@ WriteMakefile(
 		       PREOP => 'pod2text VMonitor.pm > README',
 		       COMPRESS => 'gzip -9f',
 		       SUFFIX   => '.gz', 
-		       DIST_DEFAULT => 'all tardist',
+		       DIST_DEFAULT => 'tardist',
 		      },
 	      PREREQ_PM => \%require,
 	     );

@@ -2,15 +2,30 @@ package Apache::VMonitor;
 
 BEGIN {
   # RCS/CVS complient:  must be all one line, for MakeMaker
-  $Apache::VMonitor::VERSION = do { my @r = (q$Revision: 0.03 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r }; 
+  $Apache::VMonitor::VERSION = do { my @r = (q$Revision: 0.04 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r }; 
 }
 
+
 use strict;
+use Apache::Util ();
 use Apache::Scoreboard ();
 use Apache::Constants ();
 use GTop ();
+use Time::HiRes ();
 
-@Apache::VMonitor::shortflags = qw(. S _ R W K L D G N);
+
+#@Apache::VMonitor::shortflags = qw(. S _ R W K L D G N);
+@Apache::VMonitor::longflags = ("Open slot with no current process",
+				"Starting up",
+				"Waiting for Connection",
+				"Reading Request",
+				"Sending Reply",
+				"Keepalive (read)",
+				"Logging",
+				"DNS Lookup",
+				"Gracefully finishing",
+				"None",
+			       );
 
 use constant KBYTE =>       1024;
 use constant MBYTE =>    1048576;
@@ -26,7 +41,9 @@ use constant GBYTE => 1073741824;
    REFRESH  => 0,
    VERBOSE  => 0,
      # sections to show
-   TOP      => 1,
+   SYSTEM   => 1,
+   APACHE   => 1,
+   PROCS    => 0,
    MOUNT    => 0,
    FS_USAGE => 1,
    NETLOAD  => 0,
@@ -35,16 +52,12 @@ use constant GBYTE => 1073741824;
      # devs to show if $Apache::VMonitor::Config{NETLOAD} != 0;
 @Apache::VMonitor::NETDEVS  = qw ();
 
-#
-# my $newurl = get_url(key,value)
-# update some part of the url and return
-############
-sub get_url{
-  my($key,$value) = @_;
+$Apache::VMonitor::PROC_REGEX = '';
 
-  (my $new_url = $Apache::VMonitor::url) =~ s/$key=(\d+)/$key=$value/;
-  return $new_url;
-}
+
+use vars qw($gtop);
+# initialize the gtop object
+$gtop = GTop->new;
 
 ###########
 sub handler{
@@ -65,6 +78,10 @@ sub handler{
     map {"$_=$Apache::VMonitor::Config{$_}"} 
       keys %Apache::VMonitor::Config;
 
+  my $pid = $params{pid} || 0;
+
+  $Apache::VMonitor::url .= "&pid=$pid";
+
     # if the refresh is non-null, set the refresh header
   $r->header_out
     (Refresh => 
@@ -75,9 +92,16 @@ sub handler{
   $r->send_http_header;
 
   start_html();
-  print_top();
-  choice_bar();
-  verbose();
+
+  if ($pid) {
+    print_single($params{pid});
+  } else {
+    print_top();    
+    choice_bar();
+    verbose();
+  }
+
+  print_bottom();
 
   print "</BODY>\n</HTML>\n";
 
@@ -128,9 +152,8 @@ sub print_top{
 # add/remove the sections of report.
 
   print "<PRE><HR><FONT SIZE=-1>";
-  my $gtop = GTop->new;
 
-  if ($Apache::VMonitor::Config{TOP}) {
+  if ($Apache::VMonitor::Config{SYSTEM}) {
 
     ########################
     # uptime and etc...
@@ -209,6 +232,12 @@ sub print_top{
       $swap->pagein(),
       $swap->pageout();
 
+    print "<HR>";
+
+  } # end of if ($Apache::VMonitor::Config{SYSTEM})
+
+
+  if ($Apache::VMonitor::Config{APACHE}){
     #############################################
     # mem usage and other stats per httpd process
     #############################################
@@ -217,25 +246,45 @@ sub print_top{
 
       # init the stats hash
     my %total = map {$_ => 0} qw(size real max_shared);
-    print "<HR>";
-    printf "<B> ##    %4s %s %6s %6s %6s  %5s  %s  %s  %12s %27s</B>\n", 
-      qw(PID M Size Share VSize RSS AccessNum ByteTransf Client), "Request (first 64 chars)";
+
+      # calculate the max_length of the process - note that we cannot
+      # just make this field "%6s" because of the HTML with hyperlink
+      # that has to be stuffed in.
+    my $max_pid_len = 0;
+    for (my $i=-1; $i<Apache::Constants::HARD_SERVER_LIMIT; $i++) {
+      my $pid = ($i==-1) ? getppid() : $image->parent($i)->pid;
+      last unless $pid;
+      my $length = length $pid;
+      $max_pid_len = $length if $length > $max_pid_len;
+    }
+
+    printf "<B> ##  %${max_pid_len}s %s %7s %7s %5s %5s %5s %5s %12s %27s</B>\n", 
+      qw(PID M Elapsed LastReq Size Share VSize Rss Client), "Request (first 64 chars)";
+
+    my $parent_format = "par: %${max_pid_len}s %1s %7s %7s %5s %5s %5s %5s\n";
+    my $child_format  = "%3d: %${max_pid_len}s %1s %7s %7s %5s %5s %5s %5s %15.15s %.64s \n";	
 
     for (my $i=-1; $i<Apache::Constants::HARD_SERVER_LIMIT; $i++) {
       # handle the parent case
       my $pid = ($i==-1) ? getppid() : $image->parent($i)->pid;
       last unless $pid;
-      my $proc_mem     = $gtop->proc_mem($pid);
-      my $size  = $proc_mem->size($pid)  / 1000;
+      my $proc_mem  = $gtop->proc_mem($pid);
+      my $size      = $proc_mem->size($pid);
 
         # workarond for Apache::Scoreboard (or underlying C code) bug,
         # it reports processes that are already dead. So we easily
         # skip them, since their size is zero!
-      next if $size == 0;
+      next unless $size;
 
-      my $share = $proc_mem->share($pid) / 1000;
-      my $vsize = $proc_mem->vsize($pid) / 1000;
-      my $rss   = $proc_mem->rss($pid)   / 1000;
+#      my $share = $proc_mem->share($pid) / 1000;
+#      my $vsize = $proc_mem->vsize($pid) / 1000;
+#      my $rss   = $proc_mem->rss($pid)   / 1000;
+#      my $size      = $proc_mem->size($pid)  / 1000;
+
+
+      my $share = $proc_mem->share($pid);
+      my $vsize = $proc_mem->vsize($pid);
+      my $rss   = $proc_mem->rss($pid);  
 
       #  total http size update
       $total{size}  += $size;
@@ -244,36 +293,73 @@ sub print_top{
 
       my $process = $image->servers($i);
 
+      # get absolute start and stop times in usecs since epoch
+      my ($start_sec,$start_usec_delta) = $process->start_time;
+      my $start_usec = $start_sec*1000000+$start_usec_delta;
+      
+      my ($stop_sec, $stop_usec_delta) =  $process->stop_time;
+      my $stop_usec = $stop_sec*1000000+$stop_usec_delta;
+      
+      # measure running time till now if not idle
+      my $elapsed = $stop_usec < $start_usec
+	? Time::HiRes::tv_interval
+	  ([$start_sec,$start_usec_delta], [Time::HiRes::gettimeofday])
+	    : 0;
+
+	# setting visual alert for cur_req_elapsed_run hardcoded to
+	# 15 secs so far
+      $elapsed = $elapsed > 15
+	? blinking(sprintf qq{<B><FONT color="red">%7s</FONT></B>},
+		   format_time($elapsed))
+        : format_time($elapsed);
+
+	# setting visual alert for last_req_len hardcoded to 15secs so
+	# far
+      my $req_time = $process->req_time/1000;
+      $req_time = $req_time > 15
+	? sprintf qq{<B><FONT color="red">%7s</FONT></B>},
+	          format_time($req_time)
+        : format_time($req_time);
+
+        # link the pid
+      my $length   = length $pid;
+      my $stuffing = $max_pid_len - $length;
+      my $spacing  = "&nbsp;" x $stuffing;
+      $pid = qq{$spacing<A HREF="@{[get_url(pid => $pid)]}">$pid</A>};
+
       # handle the parent case
       if ($i == -1) {
-	printf "par: %6d %1s %6d %6d %6d %6d  <B>SLOT CHLD  SLOT  CHLD </B>\n",
+	printf $parent_format,
 	$pid,
-	$Apache::VMonitor::shortflags[$process->status],
-	$size,
-	$share,
-	$vsize,
-	$rss;	
+	$process->status,
+	'',
+	'',
+	Apache::Util::size_string($size),
+	Apache::Util::size_string($share),
+	Apache::Util::size_string($vsize),
+	Apache::Util::size_string($rss),
       } else {
-	printf "%3d: %6d %1s %6d %6d %6d %6d  %4s %4s %5s %5s  %15.15s %.64s \n",	
+	printf $child_format,
 	$i,
 	$pid,
-	$Apache::VMonitor::shortflags[$process->status],
-	$size,
-	$share,
-	$vsize,
-	$rss,
-	format_counts($process->access_count),
-	format_counts($process->my_access_count),
-	format_bytes($process->bytes_served),
-	format_bytes($process->my_bytes_served),
+	$process->status,
+	$elapsed,
+	$req_time,
+	Apache::Util::size_string($size),
+	Apache::Util::size_string($share),
+	Apache::Util::size_string($vsize),
+	Apache::Util::size_string($rss),
 	$process->client,
 	$process->request;
       }
 
     } # end of for (my $i=0...
 
-    printf "\n<B>Total:     %5dK size, %6dK approx real size (-shared)</B>\n",
-      $total{size}, $total{real} + $total{max_shared};
+    printf "\n<B>Total:     %5dK (%s) size, %6dK (%s) approx real size (-shared)</B>\n",
+      $total{size}/1000,
+      Apache::Util::size_string($total{size}), 
+      ($total{real} + $total{max_shared})/1000,
+      Apache::Util::size_string($total{real} + $total{max_shared});
 
     #  Note how do I calculate the approximate real usage of the memory:
     #  1. For each process sum up the difference between shared and system
@@ -284,6 +370,14 @@ sub print_top{
     print "<HR>";
 
   } # end of if ($Apache::VMonitor::Config{TOP})
+
+
+  #########################
+  # non-mod_perl processes
+  #########################
+  if ($Apache::VMonitor::Config{PROCS}) {
+    print_other_procs();
+  } # end of if ($Apache::VMonitor::Config{PROCS})
 
   #######################
   # mounted filesystems
@@ -312,15 +406,30 @@ sub print_top{
   #######################
   if ($Apache::VMonitor::Config{FS_USAGE}) {
     #    print "<B>df:</B>\n";
-      # the header
-    printf "<B>%-7s %9s %9s %9s %3s  %9s %7s %5s</B>\n",
-      "FS", "Blocks (1k): Total", "SU Avail", "User Avail", "Usage", "Files: Total", "Avail", "Usage";
 
     my($mountlist, $entries) = $gtop->mountlist(1);
     my $fs_number = $mountlist->number;
 
-      # the filesystems
+      # for formatting purpose find out the max length of the filesystems
+    my $max_fs_name_len = 0;
+    my %fs = ();
     for (my $i = 0; $i < $fs_number; $i++) {
+      my $path = $entries->mountdir($i);
+      $fs{$path} = $i;
+      my $len = length $path;
+      $max_fs_name_len = $len if $len > $max_fs_name_len;
+    }
+
+    $max_fs_name_len = 12 if $max_fs_name_len < 12;
+      # the header
+    printf "<B>%-@{[${max_fs_name_len}-4]}s %14s %9s %9s %3s %12s %7s %5s</B>\n",
+#    printf "<B>%${max_fs_name_len}s %9s %9s %9s %3s %12s %7s %5s</B>\n",
+      "FS", "1k Blks: Total", "SU Avail", "User Avail", "Usage", 
+    "   Files: Total", "Avail", "Usage", ;
+
+      # the filesystems
+    for my $path (sort keys %fs){
+      my $i = $fs{$path};
       my $fsusage = $gtop->fsusage($entries->mountdir($i));
 
       my $tot_blocks        = $fsusage->blocks / 2;
@@ -333,19 +442,27 @@ sub print_top{
       my $usage_files       = $tot_files ? ($tot_files - $free_files) * 100 / $tot_files : 0;
 
         # prepare a format
-      my $fs_format = "%-16s";
-      my $format = "%9d %9d %10d %3d%%        %7d %7d %3d%%";
+      my $format_blocks = "%9d %9d %10d %4d%% ";
+      my $format_files  = "       %7d %7d %4d%%";
+      my $format_fs     = "%-${max_fs_name_len}s ";
+      my $format = '';
 
       # visual alert on filesystems of 90% usage!
-      if ($usage_blocks >= 90 || $usage_files >= 90) {
-        # fs on fire!
-	$format = qq{<B><FONT COLOR="#FF0000">@{[blinking($fs_format)]} $format</FONT></B>\n};
+      if ($usage_blocks >= 90 && $usage_files >= 90) {
+	$format = 
+	  qq{<B><FONT COLOR="#FF0000">@{[blinking($format_fs)]} $format_blocks $format_files</FONT></B>\n};
+      } elsif ($usage_blocks >= 90){
+	$format = 
+	  qq{<B><FONT COLOR="#FF0000">@{[blinking($format_fs)]} $format_blocks</FONT></B> $format_files\n};
+      } elsif ($usage_files  >= 90) {
+	$format = 
+	  qq{<B><FONT COLOR="#FF0000">@{[blinking($format_fs)]}</FONT></B> $format_blocks <B><FONT COLOR="#FF0000">$format_files</FONT></B>\n};
       } else {
-	$format = qq{$fs_format $format\n};
+	$format = qq{$format_fs $format_blocks $format_files\n};
       }
 
       printf $format,
-	$entries->mountdir($i),
+        $path,
 	$tot_blocks,
 	$used_blocks,
 	$user_avail_blocks,
@@ -401,16 +518,404 @@ sub print_top{
 
 } # end of sub print_top
 
+#'
+# show other non-mod_perl procs based on regex
+#################
+sub print_other_procs{
+
+  print(qq{Do not know what processes to display...
+Hint: set \$Apache::VMonitor::PROC_REGEX
+e.g. \$Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql);
+<HR>}),
+  return unless $Apache::VMonitor::PROC_REGEX;
+
+  my $gtop = GTop->new;
+
+  my($proclist, $entries) = $gtop->proclist;
+
+  my %procs = ();
+  for my $pid ( @$entries ){
+    my $cmd = $gtop->proc_state($pid)->cmd;
+    push @{ $procs{$cmd} },$pid       
+      if $cmd =~ /$Apache::VMonitor::PROC_REGEX/o;
+  }
+
+    # finding out various max lenthgs for a proper column formatting
+    # set the minimum width here
+  my %max_len = (pid => 3,
+		 cmd => 3, 
+		 tty => 3,
+		 uid => 3,
+		);
+  for my $cat (sort keys %procs) {
+    for my $pid (@{ $procs{$cat} } ) {
+        # pid len 
+      my $len       = length $pid;
+      $max_len{pid} = $len if $len > $max_len{pid};
+
+        # command len
+      $len          = length $gtop->proc_state($pid)->cmd;
+      $max_len{cmd} = $len if $len > $max_len{cmd};
+
+        # tty len      
+      $len          = length $gtop->proc_uid($pid)->tty;
+      $max_len{tty} = $len if $len > $max_len{tty};
+
+        # uid len 
+      $len          = length scalar getpwuid ($gtop->proc_state($pid)->uid);
+      $max_len{uid} = $len if $len > $max_len{uid};     
+    }
+  }
+
+  my $format = "%2s %${max_len{pid}}s %-${max_len{uid}}s %5s %5s %5s %5s %${max_len{tty}}s  %-2s  %-${max_len{cmd}}s\n";
+  printf "<B>$format</B>",
+	   '##',qw(PID UID Size Share VSize Rss TTY St Command);
+
+#  my $format = "%2s %${max_pid_len}s %-10s %5s %5s %5s %5s %12s %8s %10s  %-10s %s %s %s %s %s %s\n";
+#  printf "<B>$format</B>",
+#	   '##',qw(PID UID Size Share VSize Rss TTY State Time Command ARGV);
+
+
+  my %all_total = map {$_ => 0} qw(size real);
+  for my $cat (sort keys %procs) {
+
+    my $id = 0;
+    my %total = map {$_ => 0} qw(size real max_shared);
+
+    for my $pid (@{ $procs{$cat} } ) {
+      
+#      my $proc_time = $gtop->proc_time($pid);
+      my $proc_uid  = $gtop->proc_uid($pid);
+      my $state     = $gtop->proc_state($pid);
+      
+      my $proc_mem  = $gtop->proc_mem($pid);
+      my $size      = $proc_mem->size($pid);
+      my $share     = $proc_mem->share($pid);
+      my $vsize     = $proc_mem->vsize($pid);
+      my $rss       = $proc_mem->rss($pid);
+
+      $total{size}  += $size;
+      $total{real}  += $size-$share;
+      $total{max_shared} = $share if $total{max_shared} < $share;
+
+      $id++;
+      my $length   = length $pid;
+      my $stuffing = $max_len{pid} - $length;
+      my $spacing  = "&nbsp;" x $stuffing;
+      my $tty = $proc_uid->tty;
+      $tty = ' ' if $tty == -1;
+      printf $format,
+             $id,
+	     qq{$spacing<A HREF="@{[get_url(pid => $pid)]}">$pid</A>},
+	     scalar getpwuid ($state->uid),
+	     format_bytes($size),
+	     format_bytes($share), 
+	     format_bytes($vsize), 
+	     format_bytes($rss), 
+	     $tty,
+	     $state->state,
+#	     format_time(time - $gtop->proc_time($pid)->start_time),
+             $state->cmd;
+
+    } # end of for my $pid (@{ $procs{$cat} } )
+
+    printf "    Total size %5dK (%s) , real %6dK (%s)\n\n",
+      $total{size}/1000,
+      Apache::Util::size_string($total{size}), 
+      ($total{real} + $total{max_shared})/1000,
+      Apache::Util::size_string($total{real} + $total{max_shared});
+
+      $all_total{size}  += $total{size};
+      $all_total{real}  += $total{real}+$total{max_shared};
+
+  } # end of for my $cat (sort keys %procs)
+
+    printf "<B>All matched Total size %5dK (%s) , real %6dK (%s)</B>\n",
+      $all_total{size}/1000,
+      Apache::Util::size_string($all_total{size}), 
+      $all_total{real}/1000,
+      Apache::Util::size_string($all_total{real});
+
+  print "<HR>";
+
+} # end of sub print_other_procs
+
+
+# print status of a single proc
+################
+sub print_single{
+  my $pid = shift || 0;
+
+  my($proclist, $entries) = $gtop->proclist;
+
+    # get the proc command name
+  my $cmd = '';
+  for my $proc_pid ( @$entries ){
+    $cmd = $gtop->proc_state($pid)->cmd, last if $pid == $proc_pid;
+  }
+  
+    # the title and the link back to the main mode
+  print qq{<HR><b>Extensive Status for PID $pid ($cmd)</b>
+  	   &nbsp; &nbsp;
+  	   [ <A HREF="@{[get_url(pid => 0)]}">
+  	   Back to multiproc mode</A> ]};
+  
+    # the process might be dead already by the time you click on it.
+  my $proc_mem = $gtop->proc_mem($pid);
+    # report to observer that the process has gone if it's dead
+  print("<P>Sorry, the process $pid doesn't exist anymore!"),
+    return unless $proc_mem;
+
+    # ditto
+  my $size  = $proc_mem->size($pid);
+  print("<P>Sorry, the process $pid doesn't exist anymore!"),
+    return unless $size;
+
+  print qq{<PRE><FONT SIZE="-1">};
+
+   #############################################
+    # mem usage and other stats per httpd process
+    #############################################
+
+  my $share = $proc_mem->share($pid);
+  my $vsize = $proc_mem->vsize($pid);
+  my $rss   = $proc_mem->rss($pid)  ;
+
+  my $title_format = "  <B>%-25s</B> :";
+
+  my $image = Apache::Scoreboard->image;
+  # iterate thru Scoreboard structure to find our $pid's entry
+  my $i;
+  my $is_httpd_child = 0;
+  for ($i=0; $i<Apache::Constants::HARD_SERVER_LIMIT; $i++) {
+    $is_httpd_child = 1, last if $pid == $image->parent($i)->pid;
+  }
+  $i = -1 if $pid == getppid();
+  
+  if ($is_httpd_child || $i == -1) {
+    my $process = $image->servers($i);
+    
+    print "<HR><B>httpd specific info:</B>\n\n";
+    
+    printf "$title_format %s\n\n",  "Process type", 
+      $i == -1 ? "Parent" : "Child";
+
+      # print for all, but a parent process
+    unless ($i == -1){
+
+      printf "$title_format %s\n","Status",
+        $Apache::VMonitor::longflags[$process->status];
+
+      # get absolute start and stop times in usecs since epoch
+      my ($start_sec,$start_usec_delta) = $process->start_time;
+      my $start_usec = $start_sec*1000000+$start_usec_delta;
+      
+      my ($stop_sec, $stop_usec_delta) =  $process->stop_time;
+      my $stop_usec = $stop_sec*1000000+$stop_usec_delta;
+      
+      # measure running time till now if not idle
+      my $elapsed = $stop_usec < $start_usec
+	? Time::HiRes::tv_interval
+	  ([$start_sec,$start_usec_delta], [Time::HiRes::gettimeofday])
+	    : 0;
+
+      if ($elapsed) {
+	# setting visual alert hardcoded to 15secs so far
+	my $format = "$title_format %s\n";
+	$format = qq{<B><FONT color="red">$format</FONT></B>} 
+	  if $elapsed > 15; 
+
+	  # print the running time if currently not idle
+	printf $format, "Cur. req. is running for",format_time($elapsed);
+      } else {
+	printf "$title_format %s\n\n","Last request processed in",
+	format_time($process->req_time/1000);
+      }
+
+
+#      print "\n";
+      printf "$title_format <B>%16s</B>   <B>%16s</B> \n", " ","This slot", "This child";
+      printf "$title_format %16s   %16s \n", "Requests Served", 
+      $process->access_count,$process->my_access_count;
+      printf "$title_format (%8s) %5s   (%8s) %5s \n\n", "Bytes Transferred",
+      $process->bytes_served,
+      Apache::Util::size_string($process->bytes_served),
+      $process->my_bytes_served,
+      Apache::Util::size_string($process->my_bytes_served);
+
+      printf "$title_format %s\n",
+        "Client IP or DNS",$process->client;
+      printf "$title_format %s\n",
+        "Request (first 64 chars)",$process->request;
+
+    } # end of unless ($i == -1)
+
+    print "\n";
+    my @cpu_times = $process->times();
+    my $cpu_total = eval join "+",@cpu_times;
+    my $format = "%8s  %8s  %8s  %8s  %8s\n";
+    printf "$title_format $format","CPU times (secs)",
+       qw(total utime stime cutime cstime );
+    printf "$title_format $format", " ", map {$_/100} $cpu_total, @cpu_times;
+
+  } #  end of if ($is_httpd_child || $i == -1)
+
+
+  ### print info that we can retrieve for any process
+  print "<HR><B>General process info:</B>\n";
+ 
+   # UID and STATE
+  my $state     = $gtop->proc_state($pid);
+  printf "\n$title_format %s","UID",scalar getpwuid ($state->uid);
+  printf "\n$title_format %s","GID",scalar getgrgid ($state->gid);
+  printf "\n$title_format %s","State",$state->state;
+
+    # TTY
+  my $proc_uid  = $gtop->proc_uid($pid);  
+  my $tty = $proc_uid->tty;
+  $tty = 'None' if $tty == -1;
+  printf "\n$title_format %s","TTY", $tty;
+
+    # ARGV
+  printf "\n$title_format %s","Command line arguments",
+    join " ", @{($gtop->proc_args($pid))[1]};  
+
+  ### memory usage
+  print "\n<HR><B>Memory Usage</B> (in bytes):\n\n";
+  {
+    no strict 'refs';
+    map { my $size = $proc_mem->$_($pid);
+	  printf "  %-10.10s : %10d (%s)\n", 
+	    uc $_, $size, Apache::Util::size_string($size) } 
+      qw(size share vsize rss);
+  }
+
+
+  ### memory segments usage
+  print "\n<HR><B>Memory Segments Usage</B> (in bytes):\n\n";
+  {
+    no strict 'refs';
+    my $proc_segment = $gtop->proc_segment($pid);
+    map { my $size = $proc_segment->$_($pid);
+	  printf "  %-10.10s : %10d (%s)\n", 
+	  uc $_,$size, Apache::Util::size_string($size) } 
+      qw(text_rss shlib_rss data_rss stack_rss);
+  }
+
+    #############################################
+    # memory maps
+    #############################################
+
+  printf "<HR><B>Memory Maps:</B>\n\n";
+  
+  my($procmap, $maps) = $gtop->proc_map($pid);
+  my $number = $procmap->number;
+  my %libpaths = ();
+
+  printf "%s-%s %s - %s:%s %s - %4s\n", qw(
+	start end offset device_major device_minor inode perm
+        filename);
+
+  for (my $i = 0; $i < $number; $i++) {
+    my $filename = $maps->filename($i) || "-";
+    $libpaths{$filename}++;
+    my $perm = $maps->perm_string($i);
+    my $device = $maps->device($i);;
+    my $device_minor = ($device & 255);
+    my $device_major = (($device >> 8) & 255);
+    my $ptr_size = length pack("p", 0);
+    if ($filename) {
+      my $format;
+      if ($ptr_size == 8) {
+	$format = "%016lx-%016lx %016lx - %02x:%02x %08lu - %4s - %s\n";
+      }
+      else {
+	$format = "%08lx-%08lx %08lx - %02x:%02x %08lu - %4s - %s\n";
+      }
+      printf  $format,
+      $maps->start($i),
+      $maps->end($i),
+      $maps->offset($i),
+      $device_major, $device_minor,
+      $maps->inode($i),
+      $perm, $filename;
+      
+    } 
+    else {
+      my $format;
+      
+      if ($ptr_size == 8) {
+	$format = "%016lx-%016lx %016lx - " .
+	  "%02x:%02x %08lu - %4s\n";
+      }
+      else {
+	$format = "%08lx-%08lx %08lx - " .
+	  "%02x:%02x %08lu - %4s\n";
+	
+	printf  $format,
+	$maps->start($i),
+	$maps->end($i),
+	$maps->offset($i),
+	$device_major, $device_minor,
+	$maps->inode($i),
+	$perm;
+      }
+    }	
+  }
+
+    #############################################
+    # loaded .so libs sizes
+    #############################################
+
+  printf "<HR><B>Loaded libs Sizes:</B> (in bytes)\n\n";
+  my %libsizes = map { $_  => -s $_ } grep !/^-$/, keys %libpaths;
+
+  my $total = 0;
+  map { $total +=  $libsizes{$_};
+	printf "%10d (%s) : %s\n", $libsizes{$_}, 
+	Apache::Util::size_string($libsizes{$_}), $_
+      } 
+    sort {$libsizes{$b} <=> $libsizes{$a}} keys %libsizes;
+
+  printf "\n<B>%10d (%s): %s</B>\n", $total,
+  Apache::Util::size_string($total), "Total";
+
+  print qq{</FONT></PRE><HR>};
+
+} # end of sub print_single
+
+################
+sub print_bottom{
+print qq{
+    Generated by <A
+    HREF="http://www.perl.com/CPAN-local/authors/id/S/ST/STAS/">Apache::VMonitor</A>
+    ver. $Apache::VMonitor::VERSION
+  };
+
+}
+
+#
+# my $newurl = get_url(key,value)
+# update some part of the url and return
+############
+sub get_url{
+  my($key,$value) = @_;
+
+  (my $new_url = $Apache::VMonitor::url) =~ s/$key=(\d+)/$key=$value/;
+#  $new_url ||= "$Apache::VMonitor::url&$key=$value";
+  return $new_url;
+
+} # end of sub get_url
 
 # compacts numbers like 1200234 => 1.2M 
 ############
 sub format_bytes{
   my $bytes = shift || 0;
 
-  return                  $bytes       if $bytes < KBYTE;
-  return sprintf "%.@{[int($bytes/KBYTE) < 10 ? 1 : 0]}fK", $bytes/KBYTE if KBYTE < $bytes  and $bytes < MBYTE;
-  return sprintf "%.@{[int($bytes/MBYTE) < 10 ? 1 : 0]}fM", $bytes/MBYTE if MBYTE < $bytes  and $bytes < GBYTE;
-  return sprintf "%.@{[int($bytes/GBYTE) < 10 ? 1 : 0]}fG", $bytes/GBYTE if GBYTE < $bytes;
+  return sprintf "%5d",                                      $bytes       if $bytes < KBYTE;
+  return sprintf "%4.@{[int($bytes/KBYTE) < 10 ? 1 : 0]}fK", $bytes/KBYTE if KBYTE < $bytes  and $bytes < MBYTE;
+  return sprintf "%4.@{[int($bytes/MBYTE) < 10 ? 1 : 0]}fM", $bytes/MBYTE if MBYTE < $bytes  and $bytes < GBYTE;
+  return sprintf "%4.@{[int($bytes/GBYTE) < 10 ? 1 : 0]}fG", $bytes/GBYTE if GBYTE < $bytes;
 
 } # end of sub format_bytes
 
@@ -430,14 +935,22 @@ sub format_counts{
 
 } # end of sub format_counts
 
-# takes seconds as arguments and returns string of time in days or
-# hours if less then one day.
+# Takes seconds as int or float as an argument 
+#
+# Returns string of time in days (12d) or
+# hours/minutes (11:13) if less then one day, 
+# and secs.millisec (12.234s) if less than a minute
+#
+# The returned sting is always of 6 digits length (taken that
+# length(int days)<4) so you can ensure the column with 
+# printf "%7s", format_time($secs)
 ###############
 sub format_time{
   my $secs = shift || 0;
+  return sprintf "%6.3fs",$secs if $secs < 60;
   my $hours = $secs/3600;
-  return sprintf "%.1f days", $hours/24 if  $hours > 24;
-  return sprintf "%d:%.2d", int $hours, int $secs%3600 ?  int (($secs%3600)/60) : 0;
+  return sprintf "%6.2fd", $hours/24 if  $hours > 24;
+  return sprintf " %02d:%2.2dm", int $hours, int $secs%3600 ?  int (($secs%3600)/60) : 0;
 } # end of sub format_time
 
 
@@ -458,7 +971,7 @@ sub choice_bar{
   my @hide = ();
   my @show = ();
 
-  foreach (qw(TOP MOUNT FS_USAGE NETLOAD VERBOSE BLINKING)) {
+  foreach (qw(SYSTEM APACHE PROCS MOUNT FS_USAGE NETLOAD VERBOSE BLINKING)) {
     $Apache::VMonitor::Config{$_} != 0
     ? push @hide, $_
     : push @show, $_;
@@ -487,7 +1000,7 @@ sub verbose{
   foreach (sort keys %Apache::VMonitor::Config) {
     (my $note = $Apache::VMonitor::abbreviations{$_}) =~ s/\n\n/<P>\n/mg;
     print "$note<HR>"   
-      if $Apache::VMonitor::Config{$_}
+      if $Apache::VMonitor::Config{$_} or $_ eq "REFRESH";
   }
 
 } # end of sub verbose  
@@ -528,7 +1041,7 @@ sub verbose{
 
    },
 
-   TOP =>
+   SYSTEM =>
    qq{
      <B>Top section</B>
 
@@ -548,32 +1061,29 @@ sub verbose{
 
        <B>4th</B>: SWAP utilization: total available, total used, free, how
        many paged in and out
+     },
 
-       <B>5th</B>: HTTPD processes:
+   APACHE =>
+   qq{
+       <B>Apache/mod_perl processes:</B>
 
-<UL><LI>
-       First line reports the status of parent process (mnemonic 'par')
+	First row reports the status of parent process (mnemonic 'par')
 
        Columns:
 
 	 <B>PID</B>   = Id<BR>
 	 <B>M</B> = apache mode (See below a full table of abbreviations)<BR>
+	 <B>Elapsed</B> = time since request was started if still in process (0 otherwise)
+	 <B>LastReq</B> = time last request was served if idle now (0 otherwise)
 	 <B>Size</B>  = total size<BR>
 	 <B>Share</B> = shared size<BR>
 	 <B>VSize</B> = virtual size<BR>
 	 <B>RSS</B>   = resident size<BR>
-         <B>AccessNum</B>  = How many requests served <BR>
-	   &nbsp;&nbsp;&nbsp;&nbsp;<B>CHLD</B> = This Child<BR>
-	   &nbsp;&nbsp;&nbsp;&nbsp;<B>SLOT</B> = This Slot <BR>
-	 ( when child quits a new child takes its place at the same slot)<BR>
-         <B>ByteTransf</B> = How many bytes were transferred (downstream)<BR>
-	   &nbsp;&nbsp;&nbsp;&nbsp;<B>CHLD</B> = This Child<BR>
-	   &nbsp;&nbsp;&nbsp;&nbsp;<B>SLOT</B> = This Slot <BR>
+
 	 <B>Client</B>  = Client IP<BR>
 	 <B>Request</B> = Request (first 64 chars)<BR>
 
-</LI>
-<LI>	 Last line reports:
+	 Last row reports:
 
 	 <B>Total</B> = a total size of the httpd processes (by summing the SIZE value of each process)
 
@@ -591,8 +1101,7 @@ this number on your own risk. I have verified this number, by writing
 it down and then killing all the servers. The system memory went down
 by approximately this number. Again, use this number wisely!
 
-</LI>
-<LI>The <B>modes</B> a process can be in:
+The <B>modes</B> a process can be in:
 
 <CODE><B>_</B></CODE> = Waiting for Connection<BR>
 <CODE><B>S</B></CODE> = Starting up<BR>
@@ -603,8 +1112,23 @@ by approximately this number. Again, use this number wisely!
 <CODE><B>L</B></CODE> = Logging<BR>
 <CODE><B>G</B></CODE> = Gracefully finishing<BR>
 <CODE><B>.</B></CODE> = Open slot with no current process<BR>
-</LI>
-</UL>
+
+   },
+
+   PROCS    =>
+   qq{
+     <B>  Processes matched by <CODE>\$Apache::VMonitor::PROC_REGEX</CODE> (PROCS)</B>
+
+Setting:
+<PRE>\$Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql squid);</PRE> 
+
+will display the processes that match /httpd|mysql|squid/ regex in a
+top(1) fashion in groups of processes. After each group the report of
+total size and approximate real size is reported (approximate == size
+calculated with shared memory reducing)
+
+At the end there is a report of total size and approximate real size.
+
    },
 
    MOUNT    =>
@@ -689,7 +1213,7 @@ __END__
 
 =head1 NAME
 
-Apache::VMonitor - Visual System and Server Processes Monitor
+Apache::VMonitor - Visual System and Apache Server Monitor
 
 =head1 SYNOPSIS
 
@@ -704,18 +1228,65 @@ Apache::VMonitor - Visual System and Server Processes Monitor
   $Apache::VMonitor::Config{BLINKING} = 1;
   $Apache::VMonitor::Config{REFRESH}  = 0;
   $Apache::VMonitor::Config{VERBOSE}  = 0;
-  $Apache::VMonitor::Config{TOP}      = 1;
+  $Apache::VMonitor::Config{SYSTEM}   = 1;
+  $Apache::VMonitor::Config{APACHE}   = 1;
+  $Apache::VMonitor::Config{PROCS}    = 1;
   $Apache::VMonitor::Config{MOUNT}    = 1;
   $Apache::VMonitor::Config{FS_USAGE} = 1;
   $Apache::VMonitor::Config{NETLOAD}  = 1;
-  @Apache::VMonitor::NETDEVS  = qw(lo eth0);
+  
+  @Apache::VMonitor::NETDEVS    = qw(lo eth0);
+  $Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql squid);
 
 =head1 DESCRIPTION
 
 This module emulates the reporting functionalities of top(), mount(),
 df() and ifconfig() utilities. It has a visual alert capabilities and
 configurable automatic refresh mode. All the sections can be
-shown/hidden dynamically through the web interface.
+shown/hidden dynamically through the web interface. 
+
+The are two main modes: 
+
+=over 
+
+=item * Multi processes mode
+
+All system processes and information are shown. See the detailed
+description of the sub-modes below.
+
+=item * Single process mode
+
+An indepth information about a single process is shown.
+
+If the chosen process is an Apache/mod_perl process, the following
+info is displayed:
+
+Process type (child or parent), status of the process (starting,
+reading, sending waiting and etc), how long the current request is
+processed or last was processed. 
+
+Bytes transferred and requests served perl child and per slot.
+
+Cpu times used by process: total, utime, stime, cutime, cstime.
+
+For all processes:
+
+General process info:
+
+UID, GID, State, TTY, Command line args
+
+Memory Usage: Size, Share, VSize, RSS
+
+Memory Segments Usage: text, shared lib, date and stack.
+
+Memory Maps: start-end, offset, device_major:device_minor, inode,
+perm, library path.
+
+Loaded libraries sizes.
+
+=back
+
+Other available modes within 'Multi processes mode'.
 
 =over
 
@@ -731,7 +1302,7 @@ will cause the report to be refreshed every single minute.
 
 Note that 0 (zero) turns automatic refreshing off.
 
-=item top() emulation
+=item top(1) emulation (system)
 
 Just like top() it shows current date/time, machine uptime, average
 load, all the system CPU and memory usage: CPU Load, Mem and Swap
@@ -752,15 +1323,21 @@ The module doesn't alert when swap is being used just a little (<5Mb),
 since it happens most of the time, even when there is plenty of free
 RAM.
 
+If you don't want the system section to be displayed set:
+
+  $Apache::VMonitor::Config{SYSTEM} = 0;
+
+The default is to display this section.
+
+=item top(1) emulation (Apache/mod_perl processes)
+
 Then just like in real top() there is a report of the processes, but
 it shows all the relevant information about httpd processes only! The
 report includes the status of the process (starting, reading, sending
-waiting and etc), process' id, size, shared, virtual and resident
-size, bytes transferred by process/slot and number of requests
-processed by process/slot and a report about the used segments: text,
-shared lib, date and stack. It shows the last client's IP and Request
-(only 64 chars, as this is the maximum length stored by underlying
-Apache core library).
+waiting and etc), process' id, time since current request was started,
+last request processing time, size, shared, virtual and resident size.
+It shows the last client's IP and Request (only 64 chars, as this is
+the maximum length stored by underlying Apache core library).
 
 At the end there is a calculation of the total memory being used by
 all httpd processes as reported by kernel, plus a result of an attempt
@@ -779,13 +1356,35 @@ this number on your own risk. I have verified this number, by writing
 it down and then killing all the servers. The system memory went down
 by approximately this number. Again, use this number wisely!
 
-If you don't want the top() section to be displayed set:
+If you don't want the Apache section to be displayed set:
 
-  $Apache::VMonitor::Config{TOP} = 0;
+  $Apache::VMonitor::Config{APACHE} = 0;
 
 The default is to display this section.
 
-=item mount() emulation
+=item top(1) emulation (any processes)
+
+This section, just like the Apache/mod_perl processes section,
+displays the information in a top(1) fashion. You use a regular
+expression for processes you want to see.
+
+For each group of matched processes, just like with
+Apache/mod_processes a total size and estimation of the real memory
+taken into account the shared memory, is displayed.
+
+If you want the Apache section to be displayed a REGEX for processes
+to match. e.g if you want to see C<http>, C<mysql> and C<squid>
+processes, set:
+
+  $Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql squid);
+
+and
+
+  $Apache::VMonitor::Config{PROCS} = 1;
+
+The default is not to display this section.
+
+=item mount(1) emulation
 
 This section reports about mounted filesystems, the same way as if you
 have called mount() with no parameters.
@@ -796,7 +1395,7 @@ If you want the mount() section to be displayed set:
 
 The default is NOT to display this section.
 
-=item df() emulation 
+=item df(1) emulation 
 
 This section completely reproduces the df() utility. For each mounted
 filesystem it reports the number of total and available blocks (for
@@ -819,7 +1418,7 @@ If you don't want the df() section to be displayed set:
 
 The default is to display this section.
 
-=item ifconfig() emulation 
+=item ifconfig(1) emulation 
 
 This section emulates the reporting capabilities of the ifconfig()
 utility. It reports how many packets and bytes were received and
@@ -878,7 +1477,9 @@ Monitor reporting behavior:
 
 Control over what sections to display:
 
-  $Apache::VMonitor::Config{TOP}      = 1;
+  $Apache::VMonitor::Config{SYSTEM}   = 1;
+  $Apache::VMonitor::Config{APACHE}   = 1;
+  $Apache::VMonitor::Config{PROCS}    = 1;
   $Apache::VMonitor::Config{MOUNT}    = 1;
   $Apache::VMonitor::Config{FS_USAGE} = 1;
   $Apache::VMonitor::Config{NETLOAD}  = 1;
@@ -886,6 +1487,11 @@ Control over what sections to display:
 What net devices to display if B<$Apache::VMonitor::Config{NETLOAD}> is ON:
 
   @Apache::VMonitor::NETDEVS  = qw(lo);
+
+A regex to match processes for 'PROCS' section:
+
+  $Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql squid);
+
 
 Read the L<DESCRIPTION|/DESCRIPTION> section for a complete
 explanation of each of these variables.
@@ -898,8 +1504,8 @@ used abbreviations.
 
 =head1 PREREQUISITES
 
-You need to have B<Apache::Scoreboard> and B<GTop> installed. And of
-course a running mod_perl enabled apache server.
+You need to have B<Apache::Scoreboard>, B<Time::HiResand> and B<GTop>
+installed. And of course a running mod_perl enabled apache server.
 
 =head1 BUGS
 

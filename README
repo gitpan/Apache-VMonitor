@@ -1,5 +1,5 @@
 NAME
-    Apache::VMonitor - Visual System and Server Processes Monitor
+    Apache::VMonitor - Visual System and Apache Server Monitor
 
 SYNOPSIS
       # Configuration in httpd.conf
@@ -13,17 +13,58 @@ SYNOPSIS
       $Apache::VMonitor::Config{BLINKING} = 1;
       $Apache::VMonitor::Config{REFRESH}  = 0;
       $Apache::VMonitor::Config{VERBOSE}  = 0;
-      $Apache::VMonitor::Config{TOP}      = 1;
+      $Apache::VMonitor::Config{SYSTEM}   = 1;
+      $Apache::VMonitor::Config{APACHE}   = 1;
+      $Apache::VMonitor::Config{PROCS}    = 1;
       $Apache::VMonitor::Config{MOUNT}    = 1;
       $Apache::VMonitor::Config{FS_USAGE} = 1;
       $Apache::VMonitor::Config{NETLOAD}  = 1;
-      @Apache::VMonitor::NETDEVS  = qw(lo eth0);
+  
+      @Apache::VMonitor::NETDEVS    = qw(lo eth0);
+      $Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql squid);
 
 DESCRIPTION
     This module emulates the reporting functionalities of top(), mount(),
     df() and ifconfig() utilities. It has a visual alert capabilities and
     configurable automatic refresh mode. All the sections can be
     shown/hidden dynamically through the web interface.
+
+    The are two main modes:
+
+    * Multi processes mode
+        All system processes and information are shown. See the detailed
+        description of the sub-modes below.
+
+    * Single process mode
+        An indepth information about a single process is shown.
+
+        If the chosen process is an Apache/mod_perl process, the following
+        info is displayed:
+
+        Process type (child or parent), status of the process (starting,
+        reading, sending waiting and etc), how long the current request is
+        processed or last was processed.
+
+        Bytes transferred and requests served perl child and per slot.
+
+        Cpu times used by process: total, utime, stime, cutime, cstime.
+
+        For all processes:
+
+        General process info:
+
+        UID, GID, State, TTY, Command line args
+
+        Memory Usage: Size, Share, VSize, RSS
+
+        Memory Segments Usage: text, shared lib, date and stack.
+
+        Memory Maps: start-end, offset, device_major:device_minor, inode,
+        perm, library path.
+
+        Loaded libraries sizes.
+
+    Other available modes within 'Multi processes mode'.
 
     refresh mode
         From within a displayed monitor (by clicking on a desired refresh
@@ -37,7 +78,7 @@ DESCRIPTION
 
         Note that 0 (zero) turns automatic refreshing off.
 
-    top() emulation
+    top(1) emulation (system)
         Just like top() it shows current date/time, machine uptime, average
         load, all the system CPU and memory usage: CPU Load, Mem and Swap
         usage.
@@ -57,15 +98,21 @@ DESCRIPTION
         (<5Mb), since it happens most of the time, even when there is plenty
         of free RAM.
 
+        If you don't want the system section to be displayed set:
+
+          $Apache::VMonitor::Config{SYSTEM} = 0;
+
+        The default is to display this section.
+
+    top(1) emulation (Apache/mod_perl processes)
         Then just like in real top() there is a report of the processes, but
         it shows all the relevant information about httpd processes only!
         The report includes the status of the process (starting, reading,
-        sending waiting and etc), process' id, size, shared, virtual and
-        resident size, bytes transferred by process/slot and number of
-        requests processed by process/slot and a report about the used
-        segments: text, shared lib, date and stack. It shows the last
-        client's IP and Request (only 64 chars, as this is the maximum
-        length stored by underlying Apache core library).
+        sending waiting and etc), process' id, time since current request
+        was started, last request processing time, size, shared, virtual and
+        resident size. It shows the last client's IP and Request (only 64
+        chars, as this is the maximum length stored by underlying Apache
+        core library).
 
         At the end there is a calculation of the total memory being used by
         all httpd processes as reported by kernel, plus a result of an
@@ -85,13 +132,34 @@ DESCRIPTION
         went down by approximately this number. Again, use this number
         wisely!
 
-        If you don't want the top() section to be displayed set:
+        If you don't want the Apache section to be displayed set:
 
-          $Apache::VMonitor::Config{TOP} = 0;
+          $Apache::VMonitor::Config{APACHE} = 0;
 
         The default is to display this section.
 
-    mount() emulation
+    top(1) emulation (any processes)
+        This section, just like the Apache/mod_perl processes section,
+        displays the information in a top(1) fashion. You use a regular
+        expression for processes you want to see.
+
+        For each group of matched processes, just like with
+        Apache/mod_processes a total size and estimation of the real memory
+        taken into account the shared memory, is displayed.
+
+        If you want the Apache section to be displayed a REGEX for processes
+        to match. e.g if you want to see `http', `mysql' and `squid'
+        processes, set:
+
+          $Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql squid);
+
+        and
+
+          $Apache::VMonitor::Config{PROCS} = 1;
+
+        The default is not to display this section.
+
+    mount(1) emulation
         This section reports about mounted filesystems, the same way as if
         you have called mount() with no parameters.
 
@@ -101,7 +169,7 @@ DESCRIPTION
 
         The default is NOT to display this section.
 
-    df() emulation
+    df(1) emulation
         This section completely reproduces the df() utility. For each
         mounted filesystem it reports the number of total and available
         blocks (for both superuser and user), and usage in percents.
@@ -124,7 +192,7 @@ DESCRIPTION
 
         The default is to display this section.
 
-    ifconfig() emulation
+    ifconfig(1) emulation
         This section emulates the reporting capabilities of the ifconfig()
         utility. It reports how many packets and bytes were received and
         transmitted, their total, counts of errors and collisions, mtu size.
@@ -176,7 +244,9 @@ CONFIGURATION
 
     Control over what sections to display:
 
-      $Apache::VMonitor::Config{TOP}      = 1;
+      $Apache::VMonitor::Config{SYSTEM}   = 1;
+      $Apache::VMonitor::Config{APACHE}   = 1;
+      $Apache::VMonitor::Config{PROCS}    = 1;
       $Apache::VMonitor::Config{MOUNT}    = 1;
       $Apache::VMonitor::Config{FS_USAGE} = 1;
       $Apache::VMonitor::Config{NETLOAD}  = 1;
@@ -184,6 +254,10 @@ CONFIGURATION
     What net devices to display if $Apache::VMonitor::Config{NETLOAD} is ON:
 
       @Apache::VMonitor::NETDEVS  = qw(lo);
+
+    A regex to match processes for 'PROCS' section:
+
+      $Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql squid);
 
     Read the DESCRIPTION section for a complete explanation of each of these
     variables.
@@ -194,8 +268,8 @@ DYNAMIC RECONFIGURATION
     used abbreviations.
 
 PREREQUISITES
-    You need to have Apache::Scoreboard and GTop installed. And of course a
-    running mod_perl enabled apache server.
+    You need to have Apache::Scoreboard, Time::HiResand and GTop installed.
+    And of course a running mod_perl enabled apache server.
 
 BUGS
     Netload section reports negative bytes transferring when the numbers are
