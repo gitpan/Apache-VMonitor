@@ -2,6 +2,9 @@ NAME
     Apache::VMonitor - Visual System and Apache Server Monitor
 
 SYNOPSIS
+      # mod_status should be compiled in (it is by default)
+      ExtendedStatus On
+
       # Configuration in httpd.conf
       <Location /sys-monitor>
         SetHandler perl-script
@@ -18,9 +21,8 @@ SYNOPSIS
       $Apache::VMonitor::Config{PROCS}    = 1;
       $Apache::VMonitor::Config{MOUNT}    = 1;
       $Apache::VMonitor::Config{FS_USAGE} = 1;
-      $Apache::VMonitor::Config{NETLOAD}  = 1;
+      $Apache::VMonitor::Config{SORT_BY}  = 'size';
   
-      @Apache::VMonitor::NETDEVS    = qw(lo eth0);
       $Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql squid);
 
 DESCRIPTION
@@ -114,6 +116,9 @@ DESCRIPTION
         chars, as this is the maximum length stored by underlying Apache
         core library).
 
+        You can sort the report by any column, see the CONFIGURATION section
+        for details.
+
         At the end there is a calculation of the total memory being used by
         all httpd processes as reported by kernel, plus a result of an
         attempt to approximately calculate the real memory usage when
@@ -148,7 +153,7 @@ DESCRIPTION
         taken into account the shared memory, is displayed.
 
         If you want the Apache section to be displayed a REGEX for processes
-        to match. e.g if you want to see `http', `mysql' and `squid'
+        to match. e.g if you want to see "http", "mysql" and "squid"
         processes, set:
 
           $Apache::VMonitor::PROC_REGEX = join "\|", qw(httpd mysql squid);
@@ -191,20 +196,6 @@ DESCRIPTION
           $Apache::VMonitor::Config{FS_USAGE} = 0;
 
         The default is to display this section.
-
-    ifconfig(1) emulation
-        This section emulates the reporting capabilities of the ifconfig()
-        utility. It reports how many packets and bytes were received and
-        transmitted, their total, counts of errors and collisions, mtu size.
-        in order to display this section you need to set two variables:
-
-          $Apache::VMonitor::Config{NETLOAD} = 1;
-
-        and to set a list of net devices to report for, like:
-
-          @Apache::VMonitor::NETDEVS  = qw(lo eth0);
-
-        The default is NOT to display this section.
 
     abbreviations and hints
         The monitor uses many abbreviations, which might be knew for you. If
@@ -249,11 +240,12 @@ CONFIGURATION
       $Apache::VMonitor::Config{PROCS}    = 1;
       $Apache::VMonitor::Config{MOUNT}    = 1;
       $Apache::VMonitor::Config{FS_USAGE} = 1;
-      $Apache::VMonitor::Config{NETLOAD}  = 1;
 
-    What net devices to display if $Apache::VMonitor::Config{NETLOAD} is ON:
+    Control the sorting of the mod_perl processes report. You can sort them
+    by one of the following columns: "pid", "mode", "elapsed", "lastreq",
+    "served", "size", "share", "vsize", "rss", "client", "request".
 
-      @Apache::VMonitor::NETDEVS  = qw(lo);
+      $Apache::VMonitor::Config{SORT_BY}  = 'size';
 
     A regex to match processes for 'PROCS' section:
 
@@ -263,23 +255,28 @@ CONFIGURATION
     variables.
 
 DYNAMIC RECONFIGURATION
-    `Apache::VMonitor' allows you to dynamically turn on and off all the
+    "Apache::VMonitor" allows you to dynamically turn on and off all the
     sections and enter a verbose mode that explains each section and the
-    used abbreviations.
+    used abbreviations. These dynamic settings stored in the URI and not on
+    the server side.
 
 PREREQUISITES
-    You need to have Apache::Scoreboard, Time::HiResand and GTop installed.
-    And of course a running mod_perl enabled apache server.
+    You need to have Apache::Scoreboard installed and configured in
+    *httpd.conf*, which in turn requires mod_status to be installed. You
+    also have to enable the extended status, for this module to work
+    properly. In *httpd.conf* add:
+
+      ExtendedStatus On
+
+    You also need Time::HiRes and GTop to be installed.
+
+    And of course you need a running mod_perl enabled apache server.
 
 BUGS
-    Netload section reports negative bytes transferring when the numbers are
-    very big, consider it a bug or a feature, but the problem is in the
-    underlying libgtop library or GTop module and demands investigation.
-
 TODO
     I want to include a report about open file handlers per process to track
     file handlers leaking. It's easy to do that by just reading them from
-    `/proc/$pid/fd' but you cannot do that unless you are root. `libgtop'
+    "/proc/$pid/fd" but you cannot do that unless you are root. "libgtop"
     doesn't have this capability - if you come up with solution, please let
     me know. Thanks!
 
@@ -288,7 +285,7 @@ SEE ALSO
     manpage, the GTop manpage
 
 AUTHORS
-    Stas Bekman <sbekman@iname.com>
+    Stas Bekman <stas@stason.org>
 
 COPYRIGHT
     The Apache::VMonitor module is free software; you can redistribute it
