@@ -1,16 +1,16 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         Apache-VMonitor
-version:      2.03
+version:      2.05
 version_from: lib/Apache/VMonitor.pm
 installdirs:  site
 requires:
-    Apache::Scoreboard:            0.15
+    Apache::Scoreboard:            2.08
     Apache::Test:                  1.15
-    GTop:                          0.09
-    mod_perl:                      1.25
+    GTop:                          0.12
+    mod_perl:                      1.9915
     Template:                      2.0
     Time::HiRes:                   1.19
 
 distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.25
+generated_by: ExtUtils::MakeMaker version 6.17

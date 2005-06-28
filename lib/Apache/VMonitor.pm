@@ -1,6 +1,6 @@
 package Apache::VMonitor;
 
-$Apache::VMonitor::VERSION = '2.03';
+$Apache::VMonitor::VERSION = '2.05';
 
 require 5.006;
 
@@ -15,12 +15,12 @@ BEGIN {
     die "mod_perl is required to run this module: $@" if $@;
 
     if (MP2) {
-        require Apache::ServerUtil;
-        require Apache::RequestRec;
-        require Apache::RequestIO;
+        require Apache2::ServerUtil;
+        require Apache2::RequestRec;
+        require Apache2::RequestIO;
         require APR::Table;
-        require Apache::Const;
-        Apache::Const->import('OK');
+        require Apache2::Const;
+        Apache2::Const->import('OK');
     } else {
         require Apache;
         require Apache::Constants;
@@ -31,18 +31,15 @@ BEGIN {
 }
 
 # once 2.0 is released drop the Apache::MPM_IS_THREADED case
-use constant APACHE_IS_THREADED => MP2 &&
-    ($mod_perl::VERSION < 1.9912
-     ? Apache::MPM_IS_THREADED()
-     : require Apache::MPM && Apache::MPM->is_threaded()
-    );
+use constant APACHE_IS_THREADED => MP2 && 
+    require Apache2::MPM && Apache2::MPM->is_threaded();
 
 # Apache::Scoreboard for 1.3 scoreboard has the vhost accessor only
 # starting from version 0.12
 use constant HAS_VHOSTS => (MP2 || $Apache::Scoreboard::VERSION > 0.11);
 
 use constant SERVER_LIMIT => MP2
-    ? Apache::Const::SERVER_LIMIT
+    ? Apache::Scoreboard->image(APR::Pool->new)->server_limit
     : Apache::Constants::HARD_SERVER_LIMIT;
 
 #use constant THREAD_LIMIT => MP2
@@ -50,7 +47,7 @@ use constant SERVER_LIMIT => MP2
 #    : 0; # no threads in mp1
 
 use constant SINGLE_PROCESS_MODE => MP2
-    ? Apache::ServerUtil::exists_config_define('ONE_PROCESS')
+    ? Apache2::ServerUtil::exists_config_define('ONE_PROCESS')
     : Apache->define('X');
 
 my $gtop = GTop->new;
@@ -2205,6 +2202,8 @@ L<Apache>, L<mod_perl>, L<Apache::Scoreboard>, L<GTop>
 =head1 AUTHORS
 
 Stas Bekman <stas@stason.org>
+
+Malcolm J Harwood
 
 =head1 COPYRIGHT
 
