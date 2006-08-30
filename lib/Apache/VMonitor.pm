@@ -1,6 +1,6 @@
 package Apache::VMonitor;
 
-$Apache::VMonitor::VERSION = '2.05';
+$Apache::VMonitor::VERSION = '2.06';
 
 require 5.006;
 
@@ -11,7 +11,8 @@ use Template ();
 use GTop ();
 
 BEGIN {
-    use constant MP2 => eval { require mod_perl; $mod_perl::VERSION > 1.99 };
+    use constant MP2 => eval { require mod_perl2; $mod_perl2::VERSION >= 2.0 };
+    eval {require mod_perl} unless MP2;
     die "mod_perl is required to run this module: $@" if $@;
 
     if (MP2) {
@@ -19,6 +20,7 @@ BEGIN {
         require Apache2::RequestRec;
         require Apache2::RequestIO;
         require APR::Table;
+        require APR::Pool;
         require Apache2::Const;
         Apache2::Const->import('OK');
     } else {
@@ -2113,7 +2115,13 @@ provided by Apache and various extensions.
 
 You can control the behavior of this module by configuring the
 following variables in the startup file or inside the
-C<E<lt>PerlE<gt>> section.
+C<E<lt>PerlE<gt>> section. 
+
+B<NOTE> For Apache versions later than 2.0.53 (veriied on 2.0.54, 2.0.55,
+and 2.0.58), loading Apache::VMonitor in C<E<lt>PerlE<gt>> sections
+and/or PostConfigRequire files does not work due to a change in when
+Apache initialises the scoreboard object.
+
 
 Module loading:
 
@@ -2202,8 +2210,6 @@ L<Apache>, L<mod_perl>, L<Apache::Scoreboard>, L<GTop>
 =head1 AUTHORS
 
 Stas Bekman <stas@stason.org>
-
-Malcolm J Harwood
 
 =head1 COPYRIGHT
 
